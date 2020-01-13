@@ -32,7 +32,7 @@ Make sure that your $PATH and $LD_LIBRARY_PATH are set correctly.
 The libclang binary its location should be defined in the $LD_LIBRARY_PATH.
 """
 
-from clang.cindex import Index, CursorKind, Cursor
+from clang.cindex import Index, CursorKind, Cursor, Config
 import sys
 import json
 import vim
@@ -138,6 +138,10 @@ def main():
     file_ext = vim.eval("expand('%:p:e')")
     ext = file_ext if file_ext else vim.eval('&filetype')
     workdir = vim.eval("expand('%:p:h')")
+    try:
+        Config.set_library_file(vim.eval('g:doge_libclang_path'))
+    except:
+        pass
 
     try:
         args = vim.eval('g:doge_clang_args')
