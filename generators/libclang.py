@@ -32,7 +32,7 @@ Make sure that your $PATH and $LD_LIBRARY_PATH are set correctly.
 The libclang binary its location should be defined in the $LD_LIBRARY_PATH.
 """
 
-from clang.cindex import Index, CursorKind, Cursor, Config
+from clang.cindex import Index, CursorKind, Cursor, Config, CompilationDatabase
 import sys
 import json
 import vim
@@ -165,7 +165,7 @@ def main():
             tmp.write('\n'.join(lines))
 
         index = Index.create()
-        compiledb = index.CompilationDatabase.fromDirectory(compilation_database_path)
+        compiledb = CompilationDatabase.fromDirectory(compilation_database_path)
         file_args = compiledb.getCompileCommands(filename)
         tu = index.parse(filename, args=file_args)
         if tu:
