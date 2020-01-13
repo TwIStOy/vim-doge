@@ -146,6 +146,7 @@ def main():
 
     lines = vim.eval("getline(line(1), line('$'))")
     current_line = int(vim.eval("line('.')"))
+    compilation_database_path = vim.eval("getcwd()")
 
     # Normalize the expression by transforming everything into 1 line.
     opener_pos = int(vim.eval("search('\m[{;]', 'n')"))
@@ -160,7 +161,9 @@ def main():
             tmp.write('\n'.join(lines))
 
         index = Index.create()
-        tu = index.parse(filename, args=args)
+        compiledb = index.CompilationDatabase.fromDirectory(compilation_database_path)
+        file_args = compiledb.getCompileCommands(filename)
+        tu = index.parse(filename, args=file_args)
         if tu:
             node = find_node(tu.cursor, current_line)
             if node and node.kind in filters:
