@@ -32,14 +32,28 @@ Make sure that your $PATH and $LD_LIBRARY_PATH are set correctly.
 The libclang binary its location should be defined in the $LD_LIBRARY_PATH.
 """
 
-from clang.cindex import Index, CursorKind, Cursor, Config, CompilationDatabase
 import sys
+
+sys.path.insert(0, '/home/hawtian/llvm/cfe-9.0.0.src/bindings/python')
+
+from clang.cindex import Index, CursorKind, Cursor, Config, CompilationDatabase
 import json
 import vim
 import os
 import tempfile
 from typing import Union
 from optparse import OptionParser, OptionGroup
+
+SYSTEM_INCLUDE = [
+  "-I/usr/include/c++/7",
+  "-I/usr/include/x86_64-linux-gnu/c++/7",
+  "-I/usr/include/c++/7/backward",
+  "-I/usr/lib/gcc/x86_64-linux-gnu/7/include",
+  "-I/usr/local/include",
+  "-I/usr/lib/gcc/x86_64-linux-gnu/7/include-fixed",
+  "-I/usr/include/x86_64-linux-gnu",
+  "-I/usr/include",
+]
 
 def get_next_token(node: Cursor, key: str) -> Union[str, None]:
     """
@@ -55,8 +69,7 @@ def get_next_token(node: Cursor, key: str) -> Union[str, None]:
     except Exception:
         return None
 
-
-def find_node(node: Cursor, line: int) -> Union[Cursor, bool]:
+def find_node(node: Cursor, filename: str, line: int, fd, indent) -> Union[Cursor, bool]:
     """
     Find a node based on a given line number.
 
@@ -64,13 +77,15 @@ def find_node(node: Cursor, line: int) -> Union[Cursor, bool]:
     :param line int: The line number where the node is located at.
     :rtype clang.cindex.Cursor/bool: The found node or False otherwise.
     """
-    if node.location.line == line:
+    print(' ' * indent * 2, node, node.location, node.kind, node.displayname, str(node.location.file), file=fd)
+    if node.location.line == line and str(node.location.file) == filename:
+        print('FOUND!', file=fd)
         return node
     for child in node.get_children():
-        result = find_node(child, line)
-        if result:
+        result = find_node(child, filename, line, fd, indent + 1)
+        if result is not None:
             return result
-    return False
+    return None
 
 def print_field_decl(node: Cursor):
     """
@@ -136,6 +151,7 @@ def main():
     filters = [getattr(CursorKind, arg) for arg in sys.argv]
 
     file_ext = vim.eval("expand('%:p:e')")
+    filename = vim.eval("expand('%:p')")
     ext = file_ext if file_ext else vim.eval('&filetype')
     workdir = vim.eval("expand('%:p:h')")
     try:
@@ -158,18 +174,20 @@ def main():
     del lines[current_line-1:opener_pos]
     lines.insert(current_line-1, normalized_expr)
 
-    # Save the lines to a temp file and parse that file.
-    fd, filename = tempfile.mkstemp(dir=workdir, prefix='vim-doge-', suffix='.{}'.format(ext))
     try:
-        with os.fdopen(fd, 'w') as tmp:
-            tmp.write('\n'.join(lines))
-
         index = Index.create()
         compiledb = CompilationDatabase.fromDirectory(compilation_database_path)
         file_args = compiledb.getCompileCommands(filename)
-        tu = index.parse(filename, args=file_args)
+        args = list(file_args[0].arguments)
+        args = args[1:-1] + SYSTEM_INCLUDE
+        tu = index.parse(filename, args=args, unsaved_files=[(filename, '\n'.join(lines))], options=0x200)
+        # tu = index.parse(filename, args=args, options=0x200)
+        # print(list(tu.diagnostics))
+        # print(filename, args)
         if tu:
-            node = find_node(tu.cursor, current_line)
+            # print([(x.source, x.depth) for x in tu.get_includes()])
+            with open('/tmp/libclang.log', 'w') as fp:
+                node = find_node(tu.cursor, filename, current_line, fp, 0)
             if node and node.kind in filters:
                 if node.kind == CursorKind.FIELD_DECL:
                     print_field_decl(node)
@@ -182,9 +200,11 @@ def main():
                                    CursorKind.CLASS_TEMPLATE]:
                     print_func_decl(node)
     except Exception as e:
-        print(e)
+        print(type(e), e)
+        import traceback
+        traceback.print_exc
     finally:
-        os.remove(filename)
+        pass
 
 if __name__ == '__main__':
     main()
